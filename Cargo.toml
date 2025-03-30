@@ -1,0 +1,11 @@
+[package]
+name = "slava"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libc = "0.2"
+
+[[bin]]
+name = "tcp_server"
+path = "bin/tcp_server.rs"
