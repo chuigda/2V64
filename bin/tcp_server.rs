@@ -1,7 +1,7 @@
 use slava::{socket::TcpStream, Slava};
 
 const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nConnection: close\r\n\r\n";
-const CONGRATULATIONS: &'static [u8] = include_bytes!("congratulations.mp4");
+const CONGRATULATIONS: &'static [u8] = include_bytes!("omedetou.mp4");
 
 fn main() {
     let slava = Slava::slava();
