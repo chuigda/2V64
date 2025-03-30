@@ -222,43 +222,6 @@ pub struct TcpConnection {
 }
 
 impl TcpConnection {
-    pub fn read(&self) -> Pin<Box<dyn Future<Output=Result<Vec<u8>, String>> + Send + Sync>> {
-        struct ReadFuture {
-            fd: c_int
-        }
-
-        impl Future for ReadFuture {
-            type Output = Result<Vec<u8>, String>;
-
-            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-                let mut buf = vec![0; 1024];
-                unsafe {
-                    let bytes_read = libc::read(
-                        self.fd,
-                        buf.as_mut_ptr() as *mut _,
-                        buf.len()
-                    );
-
-                    if bytes_read > 0 {
-                        buf.resize(bytes_read as usize, 0);
-                        return Poll::Ready(Ok(buf));
-                    } else {
-                        let errno = *libc::__errno_location();
-                        if errno != libc::EAGAIN && errno != libc::EWOULDBLOCK {
-                            return Poll::Ready(Err(format!("read failed, error code = {}", errno)));
-                        }
-
-                        let waker = cx.waker().clone();
-                        add_read_fd(self.fd, waker);
-                        Poll::Pending
-                    }
-                }
-            }
-        }
-
-        Box::pin(ReadFuture { fd: self.fd })
-    }
-
     pub fn write<'a>(&self, buf: &'a [u8]) -> Pin<Box<dyn 'a + Future<Output=Result<usize, String>> + Send + Sync>> {
         struct WriteFuture<'b> {
             fd: c_int,
