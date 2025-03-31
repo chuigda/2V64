@@ -231,7 +231,7 @@ impl TcpStream {
                     } else {
                         let errno = *libc::__errno_location();
                         if errno != libc::EAGAIN && errno != libc::EWOULDBLOCK {
-                            return Poll::Ready(Err(format!("read failed: {}", IOError::from_raw_os_error(errno))));
+                            return Poll::Ready(Err(format!("read_bytes failed: {}", IOError::from_raw_os_error(errno))));
                         }
 
                         let waker = cx.waker().clone();
@@ -279,7 +279,7 @@ impl TcpStream {
                     } else {
                         let errno = *libc::__errno_location();
                         if errno != libc::EAGAIN && errno != libc::EWOULDBLOCK {
-                            return Poll::Ready(Err(format!("write failed: {}", IOError::from_raw_os_error(errno))));
+                            return Poll::Ready(Err(format!("write_bytes failed: {}", IOError::from_raw_os_error(errno))));
                         }
 
                         let waker = cx.waker().clone();

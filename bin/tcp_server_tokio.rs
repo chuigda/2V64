@@ -33,7 +33,7 @@ async fn main() {
                         return;
                     }
 
-                    if let Err(e) = stream.write_bytes(CONGRATULATIONS).await {
+                    if let Err(e) = stream.write(CONGRATULATIONS).await {
                         eprintln!("error writing HTTP payload: {}", e);
                         return;
                     }
@@ -41,7 +41,7 @@ async fn main() {
                     eprintln!("done serving contents");
                 });
             }
-            Err(e) => eprintln!("error accepting tcp connection: {}", e)
+            Err(e) => eprintln!("error accepting TCP connection: {}", e)
         }
     }
 }
