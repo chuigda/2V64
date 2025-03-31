@@ -44,7 +44,7 @@ fn main() {
                         eprintln!("done serving contents");
                     });
                 }
-                Err(e) => eprintln!("{}", e)
+                Err(e) => eprintln!("error accepting tcp connection: {}", e)
             }
         }
     });
