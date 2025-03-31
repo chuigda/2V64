@@ -1,20 +1,24 @@
 pub mod socket;
+pub mod bufread;
 
-use std::pin::Pin;
 use std::future::Future;
-use std::sync::{mpsc, Arc, Mutex};
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, RawWaker, RawWakerVTable, Waker};
+use std::thread::spawn as thread_spawn;
+
+use crossbeam::channel::{unbounded as channel_unbounded, Sender, Receiver};
 
 pub type TaskFuture = Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
 
 pub struct Slava {
-    scheduled: mpsc::Receiver<SlavaTask>,
-    sender: mpsc::Sender<SlavaTask>,
+    scheduled: Receiver<SlavaTask>,
+    sender: Sender<SlavaTask>,
 }
 
 impl Slava {
     pub fn slava() -> Arc<Self> {
-        let (sender, scheduled) = mpsc::channel();
+        let (sender, scheduled) = channel_unbounded();
         Arc::new(Self { scheduled, sender })
     }
 
@@ -23,7 +27,26 @@ impl Slava {
         self.sender.send(task).unwrap();
     }
 
-    pub fn run(&self) {
+    pub fn run(&self, n_worker_thread: usize) {
+        let mut join_handles = Vec::new();
+
+        for _ in 0..n_worker_thread {
+            let scheduled = self.scheduled.clone();
+            join_handles.push(thread_spawn(move || {
+                while let Ok(task) = scheduled.recv() {
+                    let waker = task.make_waker();
+                    let mut cx = Context::from_waker(&waker);
+                    let _ = task.task_fut.lock().unwrap().as_mut().poll(&mut cx);
+                }
+            }));
+        }
+
+        for handle in join_handles {
+            let _ = handle.join();
+        }
+    }
+
+    pub fn run_singlethreaded(&self) {
         while let Ok(task) = self.scheduled.recv() {
             let waker = task.make_waker();
             let mut cx = Context::from_waker(&waker);
@@ -32,17 +55,14 @@ impl Slava {
     }
 }
 
-// this is safe as far as we only call `run` in one thread... I guess
-unsafe impl Sync for Slava {}
-
 #[derive(Clone)]
 struct SlavaTask {
-    sender: mpsc::Sender<SlavaTask>,
+    sender: Sender<SlavaTask>,
     task_fut: Arc<Mutex<TaskFuture>>
 }
 
 impl SlavaTask {
-    pub fn new(sender: mpsc::Sender<SlavaTask>, task_fut: TaskFuture) -> Self {
+    pub fn new(sender: Sender<SlavaTask>, task_fut: TaskFuture) -> Self {
         Self {
             sender,
             task_fut: Arc::new(Mutex::new(task_fut))
