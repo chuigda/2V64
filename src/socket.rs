@@ -82,13 +82,7 @@ fn maybe_init_background_thread() {
                 }
                 drop(socket_context);
 
-                let fd = unsafe {
-                    libc::poll(
-                        poll_fds.as_mut_ptr(),
-                        nfds as libc::nfds_t,
-                        160,
-                    )
-                };
+                let fd = unsafe { libc::poll(poll_fds.as_mut_ptr(), nfds as libc::nfds_t, 160) };
 
                 if fd < 0 {
                     panic!("poll failed, error code = {}", unsafe { *libc::__errno_location() });
