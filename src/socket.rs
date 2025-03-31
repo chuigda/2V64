@@ -61,7 +61,7 @@ fn maybe_init_background_thread() {
                 let nfds = socket_context.readfds.len() + socket_context.writefds.len();
                 if nfds == 0 {
                     drop(socket_context);
-                    thread_sleep(Duration::from_millis(160));
+                    thread_sleep(Duration::from_millis(16));
                     continue;
                 }
 
@@ -82,7 +82,7 @@ fn maybe_init_background_thread() {
                 }
                 drop(socket_context);
 
-                let fd = unsafe { libc::poll(poll_fds.as_mut_ptr(), nfds as libc::nfds_t, 160) };
+                let fd = unsafe { libc::poll(poll_fds.as_mut_ptr(), nfds as libc::nfds_t, 16) };
 
                 if fd < 0 {
                     panic!("poll failed, error code = {}", unsafe { *libc::__errno_location() });
