@@ -1,6 +1,11 @@
 use slava::{bufread::BufRead, socket::TcpListener, Slava};
 
-const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nConnection: close\r\n\r\n";
+const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r
+Server: slava/slava-http\r
+Content-Type: video/mp4\r
+Connection: close\r
+\r
+";
 const CONGRATULATIONS: &'static [u8] = include_bytes!("omedetou.mp4");
 
 fn main() {
@@ -9,6 +14,7 @@ fn main() {
 
     slava.spawn(async move {
         let mut tcp_listener = TcpListener::new(4396);
+        eprintln!("slava/tokio mixed server started listening on port 4396");
 
         loop {
             match tcp_listener.accept().await {

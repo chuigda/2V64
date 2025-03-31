@@ -2,12 +2,18 @@ use slava::socket::TcpListener;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::task::spawn as tokio_spawn;
 
-const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nConnection: close\r\n\r\n";
+const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r
+Server: slava-tokio/slava-http-mixed\r
+Content-Type: video/mp4\r
+Connection: close\r
+\r
+";
 const CONGRATULATIONS: &'static [u8] = include_bytes!("omedetou.mp4");
 
 #[tokio::main]
 async fn main() {
-    let mut tcp_listener = TcpListener::new(4396);
+    let mut tcp_listener = TcpListener::new(4397);
+    eprintln!("slava/tokio mixed server started listening on port 4397");
 
     loop {
         match tcp_listener.accept().await {
