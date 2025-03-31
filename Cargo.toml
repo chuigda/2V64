@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 libc = "0.2"
+crossbeam = "0.8"
 
 [[bin]]
 name = "tcp_server"

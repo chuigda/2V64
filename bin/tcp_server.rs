@@ -32,5 +32,5 @@ fn main() {
         }
     });
 
-    slava.run();
+    slava.run(4);
 }
