@@ -327,6 +327,10 @@ impl AsyncRead for TcpStream {
 
 impl AsyncWrite for TcpStream {
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IOResult<usize>> {
+        if buf.len() == 0 {
+            return Poll::Ready(Ok(0));
+        }
+
         let bytes_written = unsafe { libc::write(self.fd, buf.as_ptr() as *const _, buf.len() as _) };
         if bytes_written < 0 {
             let errno = unsafe { *libc::__errno_location() };
@@ -337,6 +341,12 @@ impl AsyncWrite for TcpStream {
             }
 
             return Poll::Ready(Err(IOError::from_raw_os_error(errno)));
+        }
+
+        if bytes_written == 0 {
+            let waker = cx.waker().clone();
+            add_write_fd(self.fd, waker);
+            return Poll::Pending;
         }
 
         Poll::Ready(Ok(bytes_written as usize))

@@ -28,12 +28,12 @@ async fn main() {
                     };
                     eprintln!("read request line: {}", request_line.trim());
 
-                    if let Err(e) = stream.write(HTTP_HEADER).await {
+                    if let Err(e) = stream.write_all(HTTP_HEADER).await {
                         eprintln!("error writing HTTP header: {}", e);
                         return;
                     }
 
-                    if let Err(e) = stream.write(CONGRATULATIONS).await {
+                    if let Err(e) = stream.write_all(CONGRATULATIONS).await {
                         eprintln!("error writing HTTP payload: {}", e);
                         return;
                     }
