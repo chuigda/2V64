@@ -14,7 +14,7 @@ fn main() {
 
     slava.spawn(async move {
         let mut tcp_listener = TcpListener::new(4396);
-        eprintln!("slava/tokio mixed server started listening on port 4396");
+        eprintln!("slava server started listening on port 4396");
 
         loop {
             match tcp_listener.accept().await {
