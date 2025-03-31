@@ -17,7 +17,7 @@ impl<'a> BufRead<'a> {
         loop {
             let mut buf = [0; 1];
 
-            match self.tcp_stream.read(&mut buf).await {
+            match self.tcp_stream.read_bytes(&mut buf).await {
                 Ok(0) => return Err("EOF".to_string()),
                 Ok(_) => {
                     self.buffer.push(buf[0]);

@@ -1,10 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_int;
+use std::io::{Error as IOError, Result as IOResult};
 use std::pin::Pin;
 use std::sync::{Mutex, Once, OnceLock};
 use std::task::{Context, Poll, Waker};
 use std::thread::{sleep as thread_sleep, spawn as spawn_thread};
 use std::time::Duration;
+
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
 
 struct SocketContext {
     pub readfds: HashMap<c_int, Waker>,
@@ -15,6 +18,10 @@ struct SocketContext {
 
 static SOCKET_CONTEXT: OnceLock<Mutex<SocketContext>> = OnceLock::new();
 static SOCKET_BACKGROUND_THREAD: Once = Once::new();
+
+macro_rules! socket_context {
+    () => { SOCKET_CONTEXT.get_or_init(init_socket_context).lock().unwrap() }
+}
 
 fn init_socket_context() -> Mutex<SocketContext> {
     Mutex::new(SocketContext {
@@ -29,11 +36,7 @@ fn maybe_init_background_thread() {
     SOCKET_BACKGROUND_THREAD.call_once(|| {
         spawn_thread(|| {
             loop {
-                let mut socket_context = SOCKET_CONTEXT
-                    .get_or_init(init_socket_context)
-                    .lock()
-                    .unwrap();
-
+                let mut socket_context = socket_context!();
                 if !socket_context.closefds.is_empty() {
                     let mut buf = [0u8; 1024];
                     let closefds = socket_context.closefds.clone();
@@ -95,10 +98,7 @@ fn maybe_init_background_thread() {
                     continue;
                 }
 
-                let mut socket_context = SOCKET_CONTEXT
-                    .get_or_init(init_socket_context)
-                    .lock()
-                    .unwrap();
+                let mut socket_context = socket_context!();
                 for poll_fd in poll_fds.iter() {
                     if poll_fd.revents != 0 {
                         if let Some(waker) = socket_context.readfds.remove(&poll_fd.fd) {
@@ -117,24 +117,12 @@ fn maybe_init_background_thread() {
 
 fn add_read_fd(fd: c_int, waker: Waker) {
     maybe_init_background_thread();
-
-    let mut socket_context = SOCKET_CONTEXT
-        .get_or_init(init_socket_context)
-        .lock()
-        .unwrap();
-
-    socket_context.readfds.insert(fd, waker);
+    socket_context!().readfds.insert(fd, waker);
 }
 
 fn add_write_fd(fd: c_int, waker: Waker) {
     maybe_init_background_thread();
-
-    let mut socket_context = SOCKET_CONTEXT
-        .get_or_init(init_socket_context)
-        .lock()
-        .unwrap();
-
-    socket_context.writefds.insert(fd, waker);
+    socket_context!().writefds.insert(fd, waker);
 }
 
 #[derive(Debug)]
@@ -222,7 +210,7 @@ pub struct TcpStream {
 }
 
 impl TcpStream {
-    pub fn read<'a>(
+    pub fn read_bytes<'a>(
         &self,
         buf: &'a mut [u8]
     ) -> Pin<Box<dyn 'a + Future<Output=Result<usize, String>> + Send + Sync>> {
@@ -263,7 +251,7 @@ impl TcpStream {
         Box::pin(ReadFuture { fd: self.fd, buf })
     }
 
-    pub fn write<'a>(
+    pub fn write_bytes<'a>(
         &mut self,
         buf: &'a [u8]
     ) -> Pin<Box<dyn 'a + Future<Output=Result<usize, String>> + Send + Sync>> {
@@ -316,12 +304,62 @@ impl Drop for TcpStream {
     fn drop(&mut self) {
         unsafe { libc::shutdown(self.fd, libc::SHUT_WR) };
 
-        let mut socket_context = SOCKET_CONTEXT.get_or_init(init_socket_context)
-            .lock()
-            .unwrap();
-
+        let mut socket_context = socket_context!();
         socket_context.closefds.insert(self.fd);
         socket_context.readfds.remove(&self.fd);
         socket_context.writefds.remove(&self.fd);
     }
 }
+
+impl AsyncRead for TcpStream {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<IOResult<()>> {
+        let local_buf = buf.initialize_unfilled();
+        let bytes_read = unsafe { libc::read(self.fd, local_buf.as_mut_ptr() as *mut _, local_buf.len() as _) };
+        if bytes_read < 0 {
+            let errno = unsafe { *libc::__errno_location() };
+            if errno == libc::EAGAIN || errno == libc::EWOULDBLOCK {
+                let waker = cx.waker().clone();
+                add_read_fd(self.fd, waker);
+                return Poll::Pending;
+            }
+
+            return Poll::Ready(Err(IOError::from_raw_os_error(errno)));
+        }
+
+        buf.advance(bytes_read as usize);
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncWrite for TcpStream {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<IOResult<usize>> {
+        let bytes_written = unsafe { libc::write(self.fd, buf.as_ptr() as *const _, buf.len() as _) };
+        if bytes_written < 0 {
+            let errno = unsafe { *libc::__errno_location() };
+            if errno == libc::EAGAIN || errno == libc::EWOULDBLOCK {
+                let waker = cx.waker().clone();
+                add_write_fd(self.fd, waker);
+                return Poll::Pending;
+            }
+
+            return Poll::Ready(Err(IOError::from_raw_os_error(errno)));
+        }
+
+        Poll::Ready(Ok(bytes_written as usize))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<IOResult<()>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_> ) -> Poll<IOResult<()>> {
+        unsafe { libc::shutdown(self.fd, libc::SHUT_WR) };
+
+        let mut socket_context = socket_context!();
+        socket_context.readfds.remove(&self.fd);
+        socket_context.writefds.remove(&self.fd);
+
+        Poll::Ready(Ok(()))
+    }
+}
+

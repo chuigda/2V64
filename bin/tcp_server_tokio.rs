@@ -1,4 +1,5 @@
-use slava::{bufread::BufRead, socket::TcpListener};
+use slava::socket::TcpListener;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::task::spawn as tokio_spawn;
 
 const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r\nContent-Type: video/mp4\r\nConnection: close\r\n\r\n";
@@ -13,13 +14,11 @@ async fn main() {
             Ok(mut stream) => {
                 eprintln!("accepting connection");
                 tokio_spawn(async move {
-                    let mut bufread = BufRead::new(&stream);
-                    let request_line = match bufread.read_line().await {
-                        Ok(line) => line,
-                        Err(e) => {
-                            eprintln!("error reading HTTP request: {}", e);
-                            return;
-                        }
+                    let mut buf_reader = BufReader::new(&mut stream);
+                    let mut request_line = String::new();
+                    if let Err(e) =  buf_reader.read_line(&mut request_line).await {
+                        eprintln!("error reading HTTP request: {}", e);
+                        return;
                     };
                     eprintln!("read request line: {}", request_line.trim());
 
@@ -28,7 +27,7 @@ async fn main() {
                         return;
                     }
 
-                    if let Err(e) = stream.write(CONGRATULATIONS).await {
+                    if let Err(e) = stream.write_bytes(CONGRATULATIONS).await {
                         eprintln!("error writing HTTP payload: {}", e);
                         return;
                     }
