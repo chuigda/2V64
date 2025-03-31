@@ -138,11 +138,11 @@ fn add_write_fd(fd: c_int, waker: Waker) {
 }
 
 #[derive(Debug)]
-pub struct TcpStream {
+pub struct TcpListener {
     sockfd: c_int
 }
 
-impl TcpStream {
+impl TcpListener {
     pub fn new(port: u16) -> Self {
         let sockfd = unsafe { libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0) };
         unsafe {
@@ -178,20 +178,20 @@ impl TcpStream {
         Self { sockfd }
     }
 
-    pub fn accept(&mut self) -> Pin<Box<dyn Future<Output=Result<TcpConnection, String>> + Send + Sync>> {
+    pub fn accept(&mut self) -> Pin<Box<dyn Future<Output=Result<TcpStream, String>> + Send + Sync>> {
         struct AcceptFuture {
             listener_sockfd: c_int
         }
 
         impl Future for AcceptFuture {
-            type Output = Result<TcpConnection, String>;
+            type Output = Result<TcpStream, String>;
 
             fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
                 unsafe {
                     let fd = libc::accept(self.listener_sockfd, std::ptr::null_mut(), std::ptr::null_mut());
                     if fd >= 0 {
                         libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK);
-                        return Poll::Ready(Ok(TcpConnection { fd }));
+                        return Poll::Ready(Ok(TcpStream { fd }));
                     }
 
                     let errno = *libc::__errno_location();
@@ -210,19 +210,63 @@ impl TcpStream {
     }
 }
 
-impl Drop for TcpStream {
+impl Drop for TcpListener {
     fn drop(&mut self) {
         unsafe { libc::close(self.sockfd) };
     }
 }
 
 #[derive(Debug)]
-pub struct TcpConnection {
+pub struct TcpStream {
     fd: c_int
 }
 
-impl TcpConnection {
-    pub fn write<'a>(&self, buf: &'a [u8]) -> Pin<Box<dyn 'a + Future<Output=Result<usize, String>> + Send + Sync>> {
+impl TcpStream {
+    pub fn read<'a>(
+        &self,
+        buf: &'a mut [u8]
+    ) -> Pin<Box<dyn 'a + Future<Output=Result<usize, String>> + Send + Sync>> {
+        struct ReadFuture<'b> {
+            fd: c_int,
+            buf: &'b mut [u8]
+        }
+
+        impl<'b> Future for ReadFuture<'b> {
+            type Output = Result<usize, String>;
+
+            fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+                unsafe {
+                    let bytes_read = libc::read(
+                        self.fd,
+                        self.buf.as_mut_ptr() as *mut _,
+                        self.buf.len()
+                    );
+
+                    if bytes_read > 0 {
+                        Poll::Ready(Ok(bytes_read as usize))
+                    } else if bytes_read == 0 {
+                        Poll::Ready(Ok(0))
+                    } else {
+                        let errno = *libc::__errno_location();
+                        if errno != libc::EAGAIN && errno != libc::EWOULDBLOCK {
+                            return Poll::Ready(Err(format!("read failed, error code = {}", errno)));
+                        }
+
+                        let waker = cx.waker().clone();
+                        add_read_fd(self.fd, waker);
+                        Poll::Pending
+                    }
+                }
+            }
+        }
+
+        Box::pin(ReadFuture { fd: self.fd, buf })
+    }
+
+    pub fn write<'a>(
+        &mut self,
+        buf: &'a [u8]
+    ) -> Pin<Box<dyn 'a + Future<Output=Result<usize, String>> + Send + Sync>> {
         struct WriteFuture<'b> {
             fd: c_int,
             buf: &'b [u8],
@@ -268,7 +312,7 @@ impl TcpConnection {
     }
 }
 
-impl Drop for TcpConnection {
+impl Drop for TcpStream {
     fn drop(&mut self) {
         unsafe { libc::shutdown(self.fd, libc::SHUT_WR) };
 
