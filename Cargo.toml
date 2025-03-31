@@ -6,7 +6,12 @@ edition = "2024"
 [dependencies]
 libc = "0.2"
 crossbeam = "0.8"
+tokio = { version="1", features=["rt", "rt-multi-thread", "sync", "macros"] }
 
 [[bin]]
 name = "tcp_server"
 path = "bin/tcp_server.rs"
+
+[[bin]]
+name = "tcp_server_tokio"
+path = "bin/tcp_server_tokio.rs"
