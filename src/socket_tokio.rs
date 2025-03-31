@@ -4,11 +4,7 @@ use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use crate::socket::{add_read_fd, add_write_fd, TcpStream};
-
-macro_rules! socket_context {
-    () => { crate::socket::SOCKET_CONTEXT.get_or_init(crate::socket::init_socket_context).lock().unwrap() }
-}
+use crate::socket::{add_read_fd, add_write_fd, socket_context_get_or_init, TcpStream};
 
 impl AsyncRead for TcpStream {
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<IOResult<()>> {
@@ -64,7 +60,7 @@ impl AsyncWrite for TcpStream {
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_> ) -> Poll<IOResult<()>> {
         unsafe { libc::shutdown(self.fd, libc::SHUT_WR) };
 
-        let mut socket_context = socket_context!();
+        let mut socket_context = socket_context_get_or_init();
         socket_context.readfds.remove(&self.fd);
         socket_context.writefds.remove(&self.fd);
 

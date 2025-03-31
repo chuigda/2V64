@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::c_int;
 use std::io::Error as IOError;
 use std::pin::Pin;
-use std::sync::{Mutex, Once, OnceLock};
+use std::sync::{Mutex, MutexGuard, Once, OnceLock};
 use std::task::{Context, Poll, Waker};
 use std::thread::{sleep as thread_sleep, spawn as spawn_thread};
 use std::time::Duration;
@@ -14,27 +14,27 @@ pub(crate) struct SocketContext {
     pub(crate) closefds: HashSet<c_int>
 }
 
-pub(crate) static SOCKET_CONTEXT: OnceLock<Mutex<SocketContext>> = OnceLock::new();
-pub(crate) static SOCKET_BACKGROUND_THREAD: Once = Once::new();
+static SOCKET_CONTEXT: OnceLock<Mutex<SocketContext>> = OnceLock::new();
+static SOCKET_BACKGROUND_THREAD: Once = Once::new();
 
-pub(crate) fn init_socket_context() -> Mutex<SocketContext> {
-    Mutex::new(SocketContext {
-        readfds: HashMap::new(),
-        writefds: HashMap::new(),
+pub(crate) fn socket_context_get_or_init<'a>() -> MutexGuard<'a, SocketContext> {
+    fn init_socket_context() -> Mutex<SocketContext> {
+        Mutex::new(SocketContext {
+            readfds: HashMap::new(),
+            writefds: HashMap::new(),
 
-        closefds: HashSet::new()
-    })
-}
+            closefds: HashSet::new()
+        })
+    }
 
-macro_rules! socket_context {
-    () => { crate::socket::SOCKET_CONTEXT.get_or_init(crate::socket::init_socket_context).lock().unwrap() }
+    SOCKET_CONTEXT.get_or_init(init_socket_context).lock().unwrap()
 }
 
 fn maybe_init_background_thread() {
     SOCKET_BACKGROUND_THREAD.call_once(|| {
         spawn_thread(|| {
             loop {
-                let mut socket_context = socket_context!();
+                let mut socket_context = socket_context_get_or_init();
                 if !socket_context.closefds.is_empty() {
                     let mut buf = [0u8; 1024];
                     let closefds = socket_context.closefds.clone();
@@ -90,7 +90,7 @@ fn maybe_init_background_thread() {
                     continue;
                 }
 
-                let mut socket_context = socket_context!();
+                let mut socket_context = socket_context_get_or_init();
                 for poll_fd in poll_fds.iter() {
                     if poll_fd.revents != 0 {
                         if let Some(waker) = socket_context.readfds.remove(&poll_fd.fd) {
@@ -109,12 +109,12 @@ fn maybe_init_background_thread() {
 
 pub(crate) fn add_read_fd(fd: c_int, waker: Waker) {
     maybe_init_background_thread();
-    socket_context!().readfds.insert(fd, waker);
+    socket_context_get_or_init().readfds.insert(fd, waker);
 }
 
 pub(crate) fn add_write_fd(fd: c_int, waker: Waker) {
     maybe_init_background_thread();
-    socket_context!().writefds.insert(fd, waker);
+    socket_context_get_or_init().writefds.insert(fd, waker);
 }
 
 #[derive(Debug)]
@@ -296,7 +296,7 @@ impl Drop for TcpStream {
     fn drop(&mut self) {
         unsafe { libc::shutdown(self.fd, libc::SHUT_WR) };
 
-        let mut socket_context = socket_context!();
+        let mut socket_context = socket_context_get_or_init();
         socket_context.closefds.insert(self.fd);
         socket_context.readfds.remove(&self.fd);
         socket_context.writefds.remove(&self.fd);
