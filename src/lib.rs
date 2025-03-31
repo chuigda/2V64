@@ -45,6 +45,14 @@ impl Slava {
             let _ = handle.join();
         }
     }
+
+    pub fn run_singlethreaded(&self) {
+        while let Ok(task) = self.scheduled.recv() {
+            let waker = task.make_waker();
+            let mut cx = Context::from_waker(&waker);
+            let _ = task.task_fut.lock().unwrap().as_mut().poll(&mut cx);
+        }
+    }
 }
 
 #[derive(Clone)]
