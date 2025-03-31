@@ -2,12 +2,12 @@ use slava::{socket::TcpListener, Slava};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r
-Server: slava-tokio/slava-http-tokio-ioutil-mixed\r
-Content-Type: video/mp4\r
+Server: slava/slava-http-tokio-ioutil-mixed\r
+Content-Type: audio/mpeg\r
 Connection: close\r
 \r
 ";
-const CONGRATULATIONS: &'static [u8] = include_bytes!("omedetou.mp4");
+const DOKI_DOKI: &'static [u8] = include_bytes!("doki_doki_forever.mp3");
 
 fn main() {
     let slava = Slava::slava();
@@ -35,7 +35,7 @@ fn main() {
                             return;
                         }
 
-                        if let Err(e) = stream.write_all(CONGRATULATIONS).await {
+                        if let Err(e) = stream.write_all(DOKI_DOKI).await {
                             eprintln!("error writing HTTP payload: {}", e);
                             return;
                         }

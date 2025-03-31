@@ -3,12 +3,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::task::spawn as tokio_spawn;
 
 const HTTP_HEADER: &'static [u8] = b"HTTP/1.1 200 OK\r
-Server: slava-tokio/slava-http-mixed\r
-Content-Type: video/mp4\r
+Server: slava-tokio/slava-http-tokio-runtime-mixed\r
+Content-Type: application/pdf\r
 Connection: close\r
 \r
 ";
-const CONGRATULATIONS: &'static [u8] = include_bytes!("omedetou.mp4");
+const UNDERSTANDING_W: &'static [u8] = include_bytes!("understanding_algorithm_w.pdf");
 
 #[tokio::main]
 async fn main() {
@@ -33,7 +33,7 @@ async fn main() {
                         return;
                     }
 
-                    if let Err(e) = stream.write_all(CONGRATULATIONS).await {
+                    if let Err(e) = stream.write_all(UNDERSTANDING_W).await {
                         eprintln!("error writing HTTP payload: {}", e);
                         return;
                     }
