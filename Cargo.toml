@@ -13,5 +13,9 @@ name = "tcp_server"
 path = "bin/tcp_server.rs"
 
 [[bin]]
-name = "tcp_server_tokio"
-path = "bin/tcp_server_tokio.rs"
+name = "tcp_server_tokio_ioutil"
+path = "bin/tcp_server_tokio_ioutil.rs"
+
+[[bin]]
+name = "tcp_server_tokio_rt"
+path = "bin/tcp_server_tokio_rt.rs"
