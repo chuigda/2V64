@@ -7,7 +7,7 @@ use std::task::{Context, Poll, Waker};
 use std::thread::{sleep as thread_sleep, spawn as spawn_thread};
 use std::time::Duration;
 
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 struct SocketContext {
     pub readfds: HashMap<c_int, Waker>,
